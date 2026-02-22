@@ -20,7 +20,7 @@ class ApplicationController {
                 particleSize: CONSTANTS.PARTICLE_SIZE,
                 opacity: CONSTANTS.PARTICLE_OPACITY,
                 scale: 1.0,  // Scale factor for atom size (0.1 to 3.0)
-                animationEnabled: false,  // Animation off by default
+                animationEnabled: true,  // Animation on by default
                 animationSpeed: CONSTANTS.PARTICLE_ANIMATION_SPEED,  // Animation speed multiplier
                 clippingEnabled: false,  // Clipping off by default
                 clippingPosition: 0,  // Clipping plane position
@@ -76,6 +76,10 @@ class ApplicationController {
             
             // Generate initial visualization
             await this.setAtomicNumber(this.state.atomicNumber);
+            
+            // Enable animation by default
+            this.renderer.setAnimationEnabled(this.state.displaySettings.animationEnabled);
+            this.renderer.setAnimationSpeed(this.state.displaySettings.animationSpeed);
             
             console.log('AppController: Starting animation loop...');
             
@@ -266,6 +270,25 @@ class ApplicationController {
         // Ensure loading spinner is hidden
         this.showLoadingSpinner(false);
         
+        // Adjust camera to fit visible orbitals
+        if (visibleOrbitals.length > 0) {
+            // Find the largest n value among visible orbitals
+            const maxN = Math.max(...visibleOrbitals.map(o => o.n));
+            this.adjustCameraForOrbital(maxN);
+            
+            // Adjust particle size based on orbital size
+            // For orbitals larger than 1s, use larger particle size for better visibility
+            const hasLargeOrbital = visibleOrbitals.some(o => o.n > 1 || o.l > 0);
+            if (hasLargeOrbital) {
+                this.state.displaySettings.particleSize = 0.3;
+                this.updateParticleSize(0.3);
+            } else {
+                // Reset to default for 1s
+                this.state.displaySettings.particleSize = CONSTANTS.PARTICLE_SIZE;
+                this.updateParticleSize(CONSTANTS.PARTICLE_SIZE);
+            }
+        }
+        
         console.log('Visualization update complete');
     }
     
@@ -428,6 +451,38 @@ class ApplicationController {
     }
     
     /**
+     * Adjust camera distance based on orbital size
+     * @param {number} n - Principal quantum number of the outermost orbital
+     */
+    adjustCameraForOrbital(n) {
+        if (!this.renderer || !this.renderer.camera) return;
+        
+        // Calculate camera distance based on principal quantum number
+        // Larger n values need more distance to fit in view
+        // Use n² scaling with increased multiplier for very large orbitals
+        const baseDistance = 10;
+        const scaleFactor = Math.max(1, (n * n) / 2); // Increased from /4 to /2 for more zoom out
+        const distance = baseDistance * scaleFactor;
+        
+        console.log(`Adjusting camera for n=${n}: distance=${distance.toFixed(2)}`);
+        
+        // Set camera position maintaining the 45-degree angle view
+        const angle = Math.PI / 4; // 45 degrees
+        const x = distance * Math.cos(angle);
+        const y = distance * Math.cos(angle);
+        const z = distance * Math.cos(angle);
+        
+        this.renderer.camera.position.set(x, y, z);
+        this.renderer.camera.lookAt(0, 0, 0);
+        
+        // Update controls target
+        if (this.renderer.controls) {
+            this.renderer.controls.target.set(0, 0, 0);
+            this.renderer.controls.update();
+        }
+    }
+    
+    /**
      * Set auto-rotate
      * @param {boolean} enabled
      */
@@ -471,6 +526,18 @@ class ApplicationController {
         if (this.renderer && this.renderer.orbitals) {
             this.renderer.orbitals.forEach((particleSystem) => {
                 particleSystem.scale.set(scale, scale, scale);
+            });
+        }
+    }
+    
+    /**
+     * Update particle size for all orbitals
+     * @param {number} size - Particle size
+     */
+    updateParticleSize(size) {
+        if (this.renderer && this.renderer.orbitals) {
+            this.renderer.orbitals.forEach((particleSystem) => {
+                particleSystem.material.size = size;
             });
         }
     }

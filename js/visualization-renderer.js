@@ -207,7 +207,7 @@ class VisualizationRenderer {
         this.controls.enableDamping = true;
         this.controls.dampingFactor = 0.05;
         this.controls.minDistance = 5;
-        this.controls.maxDistance = 100;
+        this.controls.maxDistance = 300; // Increased from 100 to 300 for larger orbitals
         this.controls.maxPolarAngle = Math.PI;
     }
     

@@ -115,7 +115,7 @@ class GUIController {
             });
         
         // Particle size slider
-        folder.add(settings, 'particleSize', 0.01, 0.2, 0.01)
+        folder.add(settings, 'particleSize', 0.01, 1.0, 0.01)
             .name('Particle Size')
             .onChange((value) => {
                 this.updateParticleSize(value);
