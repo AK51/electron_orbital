@@ -26,9 +26,9 @@ const CONSTANTS = {
     // Color schemes for orbital types
     ORBITAL_COLORS: {
         s: { r: 0.2, g: 0.5, b: 1.0 },   // Blue
-        p: { r: 1.0, g: 0.3, b: 0.3 },   // Red
-        d: { r: 0.2, g: 0.8, b: 0.2 },   // Green
-        f: { r: 1.0, g: 0.6, b: 0.2 }    // Orange
+        p: { r: 0.2, g: 0.8, b: 0.2 },   // Green
+        d: { r: 1.0, g: 0.3, b: 0.3 },   // Red
+        f: { r: 1.0, g: 1.0, b: 0.2 }    // Yellow
     },
     
     // Mathematical constants

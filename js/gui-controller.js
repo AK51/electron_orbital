@@ -142,6 +142,19 @@ class GUIController {
                 this.appController.setAnimationSpeed(value);
             });
         
+        // Color hue gradient option
+        folder.add(settings, 'hueGradientEnabled')
+            .name('Color Hue Gradient')
+            .onChange((value) => {
+                this.appController.setHueGradientEnabled(value);
+            });
+        
+        folder.add(settings, 'hueGradientIntensity', 0, 360, 10)
+            .name('Hue Gradient Intensity')
+            .onChange((value) => {
+                this.appController.setHueGradientIntensity(value);
+            });
+        
         // Clipping plane section
         folder.add(settings, 'clippingEnabled')
             .name('Enable Clipping')
@@ -149,16 +162,22 @@ class GUIController {
                 this.appController.setClippingEnabled(value);
             });
         
-        folder.add(settings, 'clippingAxis', ['x', 'y', 'z'])
-            .name('Clipping Axis')
+        this.xClipController = folder.add(settings, 'xClipPosition', -20, 20, 0.1)
+            .name('X Clip Position')
             .onChange((value) => {
-                this.appController.setClippingAxis(value);
+                this.appController.setXClipPosition(value);
             });
         
-        folder.add(settings, 'clippingPosition', -20, 20, 0.1)
-            .name('Clipping Position')
+        this.yClipController = folder.add(settings, 'yClipPosition', -20, 20, 0.1)
+            .name('Y Clip Position')
             .onChange((value) => {
-                this.appController.setClippingPosition(value);
+                this.appController.setYClipPosition(value);
+            });
+        
+        this.zClipController = folder.add(settings, 'zClipPosition', -20, 20, 0.1)
+            .name('Z Clip Position')
+            .onChange((value) => {
+                this.appController.setZClipPosition(value);
             });
         
         // Coordinate Axes section
@@ -460,6 +479,24 @@ class GUIController {
         if (this.gui) {
             this.gui.destroy();
             this.gui = null;
+        }
+    }
+    
+    /**
+     * Update clip position sliders
+     * @param {number} x - X clip position
+     * @param {number} y - Y clip position
+     * @param {number} z - Z clip position
+     */
+    updateClipPositions(x, y, z) {
+        if (this.xClipController) {
+            this.xClipController.setValue(x);
+        }
+        if (this.yClipController) {
+            this.yClipController.setValue(y);
+        }
+        if (this.zClipController) {
+            this.zClipController.setValue(z);
         }
     }
 }

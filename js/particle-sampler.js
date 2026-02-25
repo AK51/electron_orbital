@@ -7,6 +7,133 @@
 class ParticleSampler {
     constructor(quantumEngine) {
         this.quantumEngine = quantumEngine;
+        
+        // Pre-calculated particle cache for common orbitals
+        // Stores normalized particle positions (0-1 range) that can be scaled
+        this.particleCache = null;
+        this.initializeCache();
+    }
+    
+    /**
+     * Initialize pre-calculated particle cache for common orbitals
+     * This significantly speeds up loading for frequently used orbitals
+     */
+    initializeCache() {
+        console.log('Initializing particle cache for common orbitals...');
+        
+        // Pre-generate particles for common orbitals with a base count
+        const baseCount = 10000; // Base particle count for cache
+        
+        this.particleCache = {
+            // 1s orbital (most common)
+            '1_0_0': this.generateAndNormalizeParticles(1, 0, 0, baseCount),
+            // 2s orbital
+            '2_0_0': this.generateAndNormalizeParticles(2, 0, 0, baseCount),
+            // 2p orbitals
+            '2_1_-1': this.generateAndNormalizeParticles(2, 1, -1, baseCount),
+            '2_1_0': this.generateAndNormalizeParticles(2, 1, 0, baseCount),
+            '2_1_1': this.generateAndNormalizeParticles(2, 1, 1, baseCount),
+            // 3s orbital
+            '3_0_0': this.generateAndNormalizeParticles(3, 0, 0, baseCount),
+            // 3p orbitals
+            '3_1_-1': this.generateAndNormalizeParticles(3, 1, -1, baseCount),
+            '3_1_0': this.generateAndNormalizeParticles(3, 1, 0, baseCount),
+            '3_1_1': this.generateAndNormalizeParticles(3, 1, 1, baseCount),
+            // 3d orbitals
+            '3_2_-2': this.generateAndNormalizeParticles(3, 2, -2, baseCount),
+            '3_2_-1': this.generateAndNormalizeParticles(3, 2, -1, baseCount),
+            '3_2_0': this.generateAndNormalizeParticles(3, 2, 0, baseCount),
+            '3_2_1': this.generateAndNormalizeParticles(3, 2, 1, baseCount),
+            '3_2_2': this.generateAndNormalizeParticles(3, 2, 2, baseCount)
+        };
+        
+        console.log('Particle cache initialized with', Object.keys(this.particleCache).length, 'orbitals');
+    }
+    
+    /**
+     * Generate and normalize particles for caching
+     * @param {number} n - Principal quantum number
+     * @param {number} l - Azimuthal quantum number
+     * @param {number} m - Magnetic quantum number
+     * @param {number} count - Number of particles
+     * @returns {Array} Normalized particle data
+     */
+    generateAndNormalizeParticles(n, l, m, count) {
+        const particles = [];
+        
+        // Pre-calculate max probability for normalization
+        const sampleSize = 100;
+        let maxProb = 0;
+        
+        for (let i = 0; i < sampleSize; i++) {
+            const r = this.sampleRadius(n, l);
+            const theta = this.sampleTheta(l, m);
+            const phi = this.samplePhi(m);
+            const prob = this.quantumEngine.probabilityDensity(n, l, m, r, theta, phi);
+            if (prob > maxProb) maxProb = prob;
+        }
+        
+        // Generate particles
+        for (let i = 0; i < count; i++) {
+            const r = this.sampleRadius(n, l);
+            const theta = this.sampleTheta(l, m);
+            const phi = this.samplePhi(m);
+            
+            const cartesian = this.sphericalToCartesian(
+                r * CONSTANTS.SCALE_FACTOR,
+                theta,
+                phi
+            );
+            
+            const probability = this.quantumEngine.probabilityDensity(n, l, m, r, theta, phi);
+            
+            particles.push({
+                position: cartesian,
+                probability: maxProb > 0 ? probability / maxProb : 0
+            });
+        }
+        
+        return particles;
+    }
+    
+    /**
+     * Get particles from cache or generate new ones
+     * @param {number} n - Principal quantum number
+     * @param {number} l - Azimuthal quantum number
+     * @param {number} m - Magnetic quantum number
+     * @param {number} particleCount - Desired particle count
+     * @returns {Array} Particle data
+     */
+    getParticlesFromCache(n, l, m, particleCount) {
+        const key = `${n}_${l}_${m}`;
+        
+        // Check if orbital is in cache
+        if (this.particleCache && this.particleCache[key]) {
+            const cached = this.particleCache[key];
+            const baseCount = cached.length;
+            
+            console.log(`Using cached particles for orbital (${n},${l},${m})`);
+            
+            // If requested count is close to base count, return cached particles
+            if (particleCount <= baseCount * 1.2) {
+                // Return subset or all cached particles
+                if (particleCount >= baseCount) {
+                    return cached;
+                } else {
+                    // Return random subset
+                    const step = Math.floor(baseCount / particleCount);
+                    return cached.filter((_, i) => i % step === 0).slice(0, particleCount);
+                }
+            } else {
+                // Need more particles - use cached as base and add more
+                const additionalCount = particleCount - baseCount;
+                const additional = this.generateOrbitalParticlesInternal(n, l, m, additionalCount);
+                return [...cached, ...additional];
+            }
+        }
+        
+        // Not in cache, generate normally
+        return null;
     }
     
     /**
@@ -201,11 +328,32 @@ class ParticleSampler {
     generateOrbitalParticles(n, l, m, particleCount) {
         validateQuantumNumbers(n, l, m);
         
-        const particles = [];
         const count = Math.max(CONSTANTS.MIN_PARTICLE_COUNT, 
                               Math.min(particleCount, CONSTANTS.MAX_PARTICLE_COUNT));
         
         console.log(`Generating ${count} particles for orbital (${n},${l},${m})`);
+        
+        // Try to get from cache first
+        const cachedParticles = this.getParticlesFromCache(n, l, m, count);
+        if (cachedParticles) {
+            console.log(`Returned ${cachedParticles.length} particles from cache`);
+            return cachedParticles;
+        }
+        
+        // Not in cache, generate normally
+        return this.generateOrbitalParticlesInternal(n, l, m, count);
+    }
+    
+    /**
+     * Internal method to generate particles (used when cache miss)
+     * @param {number} n - Principal quantum number
+     * @param {number} l - Azimuthal quantum number
+     * @param {number} m - Magnetic quantum number
+     * @param {number} count - Number of particles to generate
+     * @returns {Array<{position: {x, y, z}, probability: number}>}
+     */
+    generateOrbitalParticlesInternal(n, l, m, count) {
+        const particles = [];
         
         // Pre-calculate some particles to find max probability for normalization
         const sampleSize = Math.min(100, count);

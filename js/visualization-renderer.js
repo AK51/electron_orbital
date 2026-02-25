@@ -167,25 +167,17 @@ class VisualizationRenderer {
     }
     
     /**
-     * Set up clipping plane
+     * Set up clipping planes for cross-sectional views
      */
     setupClippingPlane() {
-        // Create a visual helper for the clipping plane
-        const planeSize = 30;
-        const planeGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
-        const planeMaterial = new THREE.MeshBasicMaterial({
-            color: 0xffff00,
-            side: THREE.DoubleSide,
-            transparent: true,
-            opacity: 0.2,
-            wireframe: false
-        });
+        // Create three clipping planes (one for each axis)
+        this.clippingPlanes = {
+            x: new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0),
+            y: new THREE.Plane(new THREE.Vector3(0, -1, 0), 0),
+            z: new THREE.Plane(new THREE.Vector3(0, 0, -1), 0)
+        };
         
-        this.clippingPlaneHelper = new THREE.Mesh(planeGeometry, planeMaterial);
-        this.clippingPlaneHelper.visible = false;
-        this.scene.add(this.clippingPlaneHelper);
-        
-        console.log('Clipping plane helper created');
+        console.log('Clipping planes created for X, Y, Z axes');
     }
     
     /**
@@ -217,10 +209,13 @@ class VisualizationRenderer {
      * @param {Array} particleData - Array of {position, probability}
      * @param {string} orbitalType - Orbital type (s, p, d, f)
      * @param {number} scale - Scale factor (default 1.0)
+     * @param {Object} customColor - Custom color (null to use default)
+     * @param {boolean} hueGradientEnabled - Enable hue gradient based on distance
+     * @param {number} hueGradientIntensity - Hue shift amount in degrees (0-360)
      * @returns {THREE.Points}
      */
-    createOrbitalParticles(orbitalId, particleData, orbitalType, scale = 1.0, customColor = null) {
-        console.log(`Renderer: Creating particle system for ${orbitalId} (${orbitalType}) with ${particleData.length} particles, scale: ${scale}`);
+    createOrbitalParticles(orbitalId, particleData, orbitalType, scale = 1.0, customColor = null, hueGradientEnabled = false, hueGradientIntensity = 120) {
+        console.log(`Renderer: Creating particle system for ${orbitalId} (${orbitalType}) with ${particleData.length} particles, scale: ${scale}, hueGradient: ${hueGradientEnabled}, intensity: ${hueGradientIntensity}`);
         
         const particleCount = particleData.length;
         
@@ -242,6 +237,20 @@ class VisualizationRenderer {
         
         console.log(`Renderer: Using color for ${orbitalType}:`, baseColor);
         
+        // Calculate max distance for normalization (for hue gradient)
+        let maxDistance = 0;
+        if (hueGradientEnabled) {
+            for (let i = 0; i < particleCount; i++) {
+                const particle = particleData[i];
+                const distance = Math.sqrt(
+                    particle.position.x * particle.position.x +
+                    particle.position.y * particle.position.y +
+                    particle.position.z * particle.position.z
+                );
+                if (distance > maxDistance) maxDistance = distance;
+            }
+        }
+        
         // Fill arrays with particle data
         for (let i = 0; i < particleCount; i++) {
             const particle = particleData[i];
@@ -251,11 +260,34 @@ class VisualizationRenderer {
             positions[i * 3 + 1] = particle.position.y;
             positions[i * 3 + 2] = particle.position.z;
             
-            // Color based on probability (brighter = higher probability)
+            // Color calculation
+            let finalColor = baseColor;
+            if (hueGradientEnabled) {
+                // Calculate distance from center for hue gradient
+                const distance = Math.sqrt(
+                    particle.position.x * particle.position.x +
+                    particle.position.y * particle.position.y +
+                    particle.position.z * particle.position.z
+                );
+                const normalizedDistance = maxDistance > 0 ? distance / maxDistance : 0;
+                
+                // Convert base RGB to HSL
+                const hsl = this.rgbToHsl(baseColor.r, baseColor.g, baseColor.b);
+                
+                // Shift hue based on distance using the intensity parameter
+                // Closer to center = base hue, farther = shifted hue
+                const hueShift = normalizedDistance * hueGradientIntensity;
+                const newHue = (hsl.h + hueShift) % 360;
+                
+                // Convert back to RGB
+                finalColor = this.hslToRgb(newHue, hsl.s, hsl.l);
+            }
+            
+            // Apply intensity based on probability (brighter = higher probability)
             const intensity = 0.3 + 0.7 * particle.probability;
-            colors[i * 3] = baseColor.r * intensity;
-            colors[i * 3 + 1] = baseColor.g * intensity;
-            colors[i * 3 + 2] = baseColor.b * intensity;
+            colors[i * 3] = finalColor.r * intensity;
+            colors[i * 3 + 1] = finalColor.g * intensity;
+            colors[i * 3 + 2] = finalColor.b * intensity;
             
             // Size based on probability
             sizes[i] = CONSTANTS.PARTICLE_SIZE * (0.5 + 0.5 * particle.probability);
@@ -474,111 +506,56 @@ class VisualizationRenderer {
     }
     
     /**
-     * Enable/disable clipping plane
+     * Enable/disable clipping planes
      * @param {boolean} enabled - Clipping enabled state
      */
     setClippingEnabled(enabled) {
         this.clippingEnabled = enabled;
         
-        // Don't show the helper plane
-        if (this.clippingPlaneHelper) {
-            this.clippingPlaneHelper.visible = false;
-        }
-        
         // Update all particle materials
         this.orbitals.forEach((particleSystem) => {
             if (enabled) {
-                particleSystem.material.clippingPlanes = [this.clippingPlane];
+                // Apply all three clipping planes
+                particleSystem.material.clippingPlanes = [
+                    this.clippingPlanes.x,
+                    this.clippingPlanes.y,
+                    this.clippingPlanes.z
+                ];
             } else {
                 particleSystem.material.clippingPlanes = [];
             }
             particleSystem.material.needsUpdate = true;
         });
         
-        console.log(`Clipping plane ${enabled ? 'enabled' : 'disabled'}`);
+        console.log(`Clipping planes ${enabled ? 'enabled' : 'disabled'}`);
     }
     
     /**
-     * Set clipping plane position
-     * @param {number} position - Position along the normal (-10 to 10)
+     * Set clipping position for a specific axis
+     * @param {string} axis - 'x', 'y', or 'z'
+     * @param {number} position - Position along the axis (-10 to 10)
      */
-    setClippingPosition(position) {
+    setClipPosition(axis, position) {
+        if (!this.clippingPlanes[axis]) {
+            console.error(`Invalid clipping axis: ${axis}`);
+            return;
+        }
+        
         // In Three.js, the clipping plane equation is: normal · point + constant = 0
         // Points where normal · point + constant < 0 are clipped
         // So we need to negate the position to get the correct clipping direction
-        this.clippingPlane.constant = -position;
+        this.clippingPlanes[axis].constant = -position;
         
-        // Update helper position by moving along the plane's normal vector
-        if (this.clippingPlaneHelper) {
-            const normal = this.clippingPlane.normal;
-            // Position = normal * distance
-            this.clippingPlaneHelper.position.set(
-                normal.x * position,
-                normal.y * position,
-                normal.z * position
-            );
+        // Force update of materials if clipping is enabled
+        if (this.clippingEnabled) {
+            this.orbitals.forEach((particleSystem) => {
+                if (particleSystem.material.clippingPlanes && particleSystem.material.clippingPlanes.length > 0) {
+                    particleSystem.material.needsUpdate = true;
+                }
+            });
         }
         
-        // Force update of materials
-        this.orbitals.forEach((particleSystem) => {
-            if (particleSystem.material.clippingPlanes && particleSystem.material.clippingPlanes.length > 0) {
-                particleSystem.material.needsUpdate = true;
-            }
-        });
-    }
-    
-    /**
-     * Set clipping plane axis
-     * @param {string} axis - 'x', 'y', or 'z'
-     */
-    setClippingAxis(axis) {
-        // Reset position to 0 when axis changes
-        const resetPosition = 0;
-        
-        switch (axis) {
-            case 'x':
-                // Plane perpendicular to X-axis (YZ plane)
-                this.clippingPlane.normal.set(1, 0, 0);
-                if (this.clippingPlaneHelper) {
-                    // Rotate to be perpendicular to X-axis
-                    this.clippingPlaneHelper.rotation.set(0, Math.PI / 2, 0);
-                    this.clippingPlaneHelper.position.set(resetPosition, 0, 0);
-                }
-                break;
-            case 'y':
-                // Plane perpendicular to Y-axis (XZ plane)
-                this.clippingPlane.normal.set(0, 1, 0);
-                if (this.clippingPlaneHelper) {
-                    // Rotate to be perpendicular to Y-axis (horizontal)
-                    this.clippingPlaneHelper.rotation.set(0, 0, 0);
-                    this.clippingPlaneHelper.position.set(0, resetPosition, 0);
-                }
-                break;
-            case 'z':
-                // Plane perpendicular to Z-axis (XY plane)
-                this.clippingPlane.normal.set(0, 0, 1);
-                if (this.clippingPlaneHelper) {
-                    // Rotate to be perpendicular to Z-axis
-                    this.clippingPlaneHelper.rotation.set(Math.PI / 2, 0, 0);
-                    this.clippingPlaneHelper.position.set(0, 0, resetPosition);
-                }
-                break;
-        }
-        
-        // Reset clipping position to 0
-        this.clippingPlane.constant = -resetPosition;
-        
-        // Force update of clipping plane
-        this.orbitals.forEach((particleSystem) => {
-            if (particleSystem.material.clippingPlanes && particleSystem.material.clippingPlanes.length > 0) {
-                particleSystem.material.needsUpdate = true;
-            }
-        });
-        
-        console.log(`Clipping axis set to: ${axis}, normal: (${this.clippingPlane.normal.x}, ${this.clippingPlane.normal.y}, ${this.clippingPlane.normal.z}), position reset to 0`);
-        
-        // Return the reset position so the app controller can update the GUI
-        return resetPosition;
+        console.log(`${axis.toUpperCase()}-axis clipping position set to: ${position}`);
     }
     
     /**
@@ -672,6 +649,69 @@ class VisualizationRenderer {
         if (this.renderer) {
             this.renderer.dispose();
         }
+    }
+    
+    /**
+     * Convert RGB to HSL
+     * @param {number} r - Red (0-1)
+     * @param {number} g - Green (0-1)
+     * @param {number} b - Blue (0-1)
+     * @returns {Object} - {h: 0-360, s: 0-1, l: 0-1}
+     */
+    rgbToHsl(r, g, b) {
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h, s, l = (max + min) / 2;
+        
+        if (max === min) {
+            h = s = 0; // achromatic
+        } else {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            
+            switch (max) {
+                case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+                case g: h = ((b - r) / d + 2) / 6; break;
+                case b: h = ((r - g) / d + 4) / 6; break;
+            }
+        }
+        
+        return { h: h * 360, s: s, l: l };
+    }
+    
+    /**
+     * Convert HSL to RGB
+     * @param {number} h - Hue (0-360)
+     * @param {number} s - Saturation (0-1)
+     * @param {number} l - Lightness (0-1)
+     * @returns {Object} - {r: 0-1, g: 0-1, b: 0-1}
+     */
+    hslToRgb(h, s, l) {
+        h = h / 360; // Convert to 0-1 range
+        
+        let r, g, b;
+        
+        if (s === 0) {
+            r = g = b = l; // achromatic
+        } else {
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            
+            r = hue2rgb(p, q, h + 1/3);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1/3);
+        }
+        
+        return { r: r, g: g, b: b };
     }
 }
 

@@ -23,8 +23,11 @@ class ApplicationController {
                 animationEnabled: true,  // Animation on by default
                 animationSpeed: CONSTANTS.PARTICLE_ANIMATION_SPEED,  // Animation speed multiplier
                 clippingEnabled: false,  // Clipping off by default
-                clippingPosition: 0,  // Clipping plane position
-                clippingAxis: 'y'  // Clipping plane axis
+                xClipPosition: 0,  // X-axis clipping position
+                yClipPosition: 0,  // Y-axis clipping position
+                zClipPosition: 0,   // Z-axis clipping position
+                hueGradientEnabled: false,  // Color hue gradient off by default
+                hueGradientIntensity: 120  // Hue shift amount in degrees (0-360)
             },
             cameraSettings: {
                 autoRotate: false,
@@ -248,7 +251,9 @@ class ApplicationController {
                         particles,
                         orbital.getType(),
                         this.state.displaySettings.scale,
-                        orbital.color  // Pass custom color (null if not set)
+                        orbital.color,  // Pass custom color (null if not set)
+                        this.state.displaySettings.hueGradientEnabled,  // Pass hue gradient flag
+                        this.state.displaySettings.hueGradientIntensity  // Pass hue gradient intensity
                     );
                     
                 } catch (error) {
@@ -581,33 +586,81 @@ class ApplicationController {
      */
     setClippingEnabled(enabled) {
         this.state.displaySettings.clippingEnabled = enabled;
+        
+        // Reset all clip positions to 0 when disabling
+        if (!enabled) {
+            this.state.displaySettings.xClipPosition = 0;
+            this.state.displaySettings.yClipPosition = 0;
+            this.state.displaySettings.zClipPosition = 0;
+            
+            if (this.renderer) {
+                this.renderer.setClipPosition('x', 0);
+                this.renderer.setClipPosition('y', 0);
+                this.renderer.setClipPosition('z', 0);
+            }
+            
+            // Update GUI sliders to show 0
+            if (this.guiController) {
+                this.guiController.updateClipPositions(0, 0, 0);
+            }
+        }
+        
         if (this.renderer) {
             this.renderer.setClippingEnabled(enabled);
         }
     }
     
     /**
-     * Set clipping plane position
-     * @param {number} position - Position along the normal
+     * Set X-axis clipping position
+     * @param {number} position - Position along X-axis
      */
-    setClippingPosition(position) {
-        this.state.displaySettings.clippingPosition = position;
+    setXClipPosition(position) {
+        this.state.displaySettings.xClipPosition = position;
         if (this.renderer) {
-            this.renderer.setClippingPosition(position);
+            this.renderer.setClipPosition('x', position);
         }
     }
     
     /**
-     * Set clipping plane axis
-     * @param {string} axis - 'x', 'y', or 'z'
+     * Set Y-axis clipping position
+     * @param {number} position - Position along Y-axis
      */
-    setClippingAxis(axis) {
-        this.state.displaySettings.clippingAxis = axis;
+    setYClipPosition(position) {
+        this.state.displaySettings.yClipPosition = position;
         if (this.renderer) {
-            const resetPosition = this.renderer.setClippingAxis(axis);
-            // Update the GUI to reflect the reset position
-            this.state.displaySettings.clippingPosition = resetPosition;
+            this.renderer.setClipPosition('y', position);
         }
+    }
+    
+    /**
+     * Set Z-axis clipping position
+     * @param {number} position - Position along Z-axis
+     */
+    setZClipPosition(position) {
+        this.state.displaySettings.zClipPosition = position;
+        if (this.renderer) {
+            this.renderer.setClipPosition('z', position);
+        }
+    }
+    
+    /**
+     * Enable/disable color hue gradient
+     * @param {boolean} enabled - Hue gradient enabled state
+     */
+    setHueGradientEnabled(enabled) {
+        this.state.displaySettings.hueGradientEnabled = enabled;
+        // Regenerate visualization with new color mode
+        this.updateVisualization();
+    }
+    
+    /**
+     * Set hue gradient intensity
+     * @param {number} intensity - Hue shift amount in degrees (0-360)
+     */
+    setHueGradientIntensity(intensity) {
+        this.state.displaySettings.hueGradientIntensity = intensity;
+        // Regenerate visualization with new gradient intensity
+        this.updateVisualization();
     }
     
     /**
