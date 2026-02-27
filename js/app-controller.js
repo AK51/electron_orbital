@@ -10,13 +10,17 @@ class ApplicationController {
         this.renderer = null;
         this.guiController = null;
         this.configuration = null;
+        this.isMobile = this.detectMobile();
+        
+        // Adjust default particle count for mobile devices
+        const defaultParticleCount = this.isMobile ? 30000 : CONSTANTS.DEFAULT_PARTICLE_COUNT;
         
         // Application state
         this.state = {
             atomicNumber: 1,
             elementSymbol: 'H',
             displaySettings: {
-                particleCount: CONSTANTS.DEFAULT_PARTICLE_COUNT,
+                particleCount: defaultParticleCount,
                 particleSize: CONSTANTS.PARTICLE_SIZE,
                 opacity: CONSTANTS.PARTICLE_OPACITY,
                 scale: 1.0,  // Scale factor for atom size (0.1 to 3.0)
@@ -35,6 +39,15 @@ class ApplicationController {
                 rotationAxis: 'y'  // 'x', 'y', or 'z'
             }
         };
+    }
+    
+    /**
+     * Detect if device is mobile
+     * @returns {boolean}
+     */
+    detectMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || window.innerWidth <= 768;
     }
     
     /**

@@ -9,21 +9,60 @@ class GUIController {
         this.gui = null;
         this.folders = {};
         this.orbitalControls = new Map();
+        this.isMobile = this.detectMobile();
+    }
+    
+    /**
+     * Detect if device is mobile
+     * @returns {boolean}
+     */
+    detectMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) 
+            || window.innerWidth <= 768;
     }
     
     /**
      * Initialize lil-gui interface
      */
     initialize() {
-        this.gui = new lil.GUI({ width: 450 });
+        // Adjust GUI width based on device
+        const guiWidth = this.isMobile ? Math.min(window.innerWidth - 20, 320) : 450;
+        
+        this.gui = new lil.GUI({ 
+            width: guiWidth,
+            autoPlace: true
+        });
         this.gui.title('Electron Cloud Visualizer');
+        
+        // Close all folders by default on mobile for better UX
+        if (this.isMobile) {
+            this.gui.close();
+        }
         
         this.createAtomControls();
         this.createDisplayControls();
         this.createCameraControls();
         this.createCredits();
         
+        // Add mobile-specific styling
+        if (this.isMobile) {
+            this.applyMobileStyling();
+        }
+        
         return this.gui;
+    }
+    
+    /**
+     * Apply mobile-specific styling to GUI
+     */
+    applyMobileStyling() {
+        const guiElement = this.gui.domElement;
+        guiElement.style.position = 'fixed';
+        guiElement.style.top = '10px';
+        guiElement.style.right = '10px';
+        guiElement.style.maxHeight = 'calc(100vh - 20px)';
+        guiElement.style.overflowY = 'auto';
+        guiElement.style.zIndex = '1000';
     }
     
     /**
